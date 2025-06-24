@@ -1,0 +1,17 @@
+[2025-06-23 17:05:56] Using device: cuda
+[2025-06-23 17:05:56] Batch size: 32, Epochs: 20
+[2025-06-23 17:31:22] ✅ Epoch 1 – Avg Train Loss: 0.0000
+[2025-06-23 17:31:23] 📊 Validation Metrics: {'num_classes_detected': 0, 'classes_detected': [], 'avg_iou': 0.0, 'avg_l1_error': 0.0, 'val_loss': 0.0}
+[2025-06-23 17:31:26] Saved checkpoint → checkpoints/epoch_1.pth
+[2025-06-23 17:31:26] Saved metrics   → checkpoints/metrics_epoch_1.json
+[2025-06-23 17:31:26] Epoch 1 complete! Avg Loss: 0.0000, Avg IoU: 0.0000
+[2025-06-23 17:56:20] ✅ Epoch 2 – Avg Train Loss: 0.0000
+[2025-06-23 17:56:21] 📊 Validation Metrics: {'num_classes_detected': 0, 'classes_detected': [], 'avg_iou': 0.0, 'avg_l1_error': 0.0, 'val_loss': 0.0}
+[2025-06-23 17:56:23] Saved checkpoint → checkpoints/epoch_2.pth
+[2025-06-23 17:56:23] Saved metrics   → checkpoints/metrics_epoch_2.json
+[2025-06-23 17:56:23] Epoch 2 complete! Avg Loss: 0.0000, Avg IoU: 0.0000
+[2025-06-23 18:21:11] ✅ Epoch 3 – Avg Train Loss: 0.0000
+[2025-06-23 18:21:12] 📊 Validation Metrics: {'num_classes_detected': 0, 'classes_detected': [], 'avg_iou': 0.0, 'avg_l1_error': 0.0, 'val_loss': 0.0}
+[2025-06-23 18:21:13] Saved checkpoint → checkpoints/epoch_3.pth
+[2025-06-23 18:21:13] Saved metrics   → checkpoints/metrics_epoch_3.json
+[2025-06-23 18:21:13] Epoch 3 complete! Avg Loss: 0.0000, Avg IoU: 0.0000

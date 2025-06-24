@@ -1,0 +1,34 @@
+[2025-06-24 00:49:41] Using device: cuda
+[2025-06-24 00:49:41] Batch size: 32, Epochs: 20
+[2025-06-24 01:57:27] ✅ Epoch 1 – Avg Train Loss: 52.6453, Accuracy: 4.72%
+[2025-06-24 02:00:57] 📊 Validation Metrics: {'num_classes_detected': 8, 'classes_detected': [0, 7, 15, 28, 33, 34, 35, 40], 'avg_iou': 0.03705173937879303, 'avg_l1_error': 48.14762671885225, 'val_loss': 0.0, 'accuracy': 0.05802526906878802}
+[2025-06-24 02:00:59] 🎉 New best model at epoch 1 (Avg IoU: 0.0371, Accuracy: 5.80%)
+[2025-06-24 02:01:01] Saved checkpoint → checkpoints/epoch_1.pth
+[2025-06-24 02:01:01] Saved metrics   → checkpoints/metrics_epoch_1.json
+[2025-06-24 02:01:01] Epoch 1 complete! Avg Loss: 52.6453, Train Acc: 4.72%, Val Acc: 5.80%, Avg IoU: 0.0371
+[2025-06-24 03:08:44] ✅ Epoch 2 – Avg Train Loss: 51.9483, Accuracy: 6.27%
+[2025-06-24 03:12:10] 📊 Validation Metrics: {'num_classes_detected': 11, 'classes_detected': [0, 4, 5, 11, 13, 15, 20, 25, 34, 38, 40], 'avg_iou': 0.06713593689196963, 'avg_l1_error': 47.69459304399004, 'val_loss': 0.0, 'accuracy': 0.058961160505381374}
+[2025-06-24 03:12:11] 🎉 New best model at epoch 2 (Avg IoU: 0.0671, Accuracy: 5.90%)
+[2025-06-24 03:12:13] Saved checkpoint → checkpoints/epoch_2.pth
+[2025-06-24 03:12:13] Saved metrics   → checkpoints/metrics_epoch_2.json
+[2025-06-24 03:12:13] Epoch 2 complete! Avg Loss: 51.9483, Train Acc: 6.27%, Val Acc: 5.90%, Avg IoU: 0.0671
+[2025-06-24 04:19:57] ✅ Epoch 3 – Avg Train Loss: 51.3911, Accuracy: 7.41%
+[2025-06-24 04:23:19] 📊 Validation Metrics: {'num_classes_detected': 17, 'classes_detected': [0, 2, 5, 11, 13, 15, 17, 18, 27, 34, 35, 38, 39, 40, 42, 43, 47], 'avg_iou': 0.05836248254041526, 'avg_l1_error': 47.64964747083037, 'val_loss': 0.0, 'accuracy': 0.06364061768834815}
+[2025-06-24 04:23:20] Saved checkpoint → checkpoints/epoch_3.pth
+[2025-06-24 04:23:20] Saved metrics   → checkpoints/metrics_epoch_3.json
+[2025-06-24 04:23:20] Epoch 3 complete! Avg Loss: 51.3911, Train Acc: 7.41%, Val Acc: 6.36%, Avg IoU: 0.0584
+[2025-06-24 05:27:19] ✅ Epoch 4 – Avg Train Loss: 51.5231, Accuracy: 7.27%
+[2025-06-24 05:29:25] 📊 Validation Metrics: {'num_classes_detected': 19, 'classes_detected': [0, 5, 11, 13, 15, 16, 17, 18, 20, 21, 27, 28, 32, 34, 35, 38, 39, 40, 41], 'avg_iou': 0.05956621765569738, 'avg_l1_error': 47.59507066756138, 'val_loss': 0.0, 'accuracy': 0.07299953205428171}
+[2025-06-24 05:29:26] Saved checkpoint → checkpoints/epoch_4.pth
+[2025-06-24 05:29:26] Saved metrics   → checkpoints/metrics_epoch_4.json
+[2025-06-24 05:29:26] Epoch 4 complete! Avg Loss: 51.5231, Train Acc: 7.27%, Val Acc: 7.30%, Avg IoU: 0.0596
+[2025-06-24 06:11:50] ✅ Epoch 5 – Avg Train Loss: 51.3552, Accuracy: 7.74%
+[2025-06-24 06:13:57] 📊 Validation Metrics: {'num_classes_detected': 19, 'classes_detected': [0, 2, 4, 5, 6, 7, 11, 12, 13, 15, 17, 20, 21, 34, 35, 38, 39, 40, 47], 'avg_iou': 0.054909191154848165, 'avg_l1_error': 47.79031229800134, 'val_loss': 0.0, 'accuracy': 0.0627047262517548}
+[2025-06-24 06:13:59] Saved checkpoint → checkpoints/epoch_5.pth
+[2025-06-24 06:13:59] Saved metrics   → checkpoints/metrics_epoch_5.json
+[2025-06-24 06:13:59] Epoch 5 complete! Avg Loss: 51.3552, Train Acc: 7.74%, Val Acc: 6.27%, Avg IoU: 0.0549
+[2025-06-24 06:56:20] ✅ Epoch 6 – Avg Train Loss: 51.2650, Accuracy: 7.71%
+[2025-06-24 06:58:25] 📊 Validation Metrics: {'num_classes_detected': 18, 'classes_detected': [0, 2, 4, 5, 6, 11, 13, 17, 18, 20, 21, 27, 35, 38, 39, 40, 43, 47], 'avg_iou': 0.062208088916493195, 'avg_l1_error': 47.301772193926546, 'val_loss': 0.0, 'accuracy': 0.07065980346279832}
+[2025-06-24 06:58:26] Saved checkpoint → checkpoints/epoch_6.pth
+[2025-06-24 06:58:26] Saved metrics   → checkpoints/metrics_epoch_6.json
+[2025-06-24 06:58:26] Epoch 6 complete! Avg Loss: 51.2650, Train Acc: 7.71%, Val Acc: 7.07%, Avg IoU: 0.0622
