@@ -1,8 +1,6 @@
 import torch
 from functools import partial
-from timm.layers import PatchEmbed
-from backbone.vit_bid import VisionFace, VisionDectector  # Make sure both are imported
-
+from backbone.vit_bid import VisionClassifier
 
 def print_parameter_stats(model):
     total = sum(p.numel() for p in model.parameters())
@@ -12,69 +10,86 @@ def print_parameter_stats(model):
     percent = 100 * trainable / total if total > 0 else 0
     print(f"\n📊 Parameters: {total_m:.2f}M total | {trainable_m:.2f}M trainable ({percent:.2f}%)")
 
-
-
-def get_model(use_lora=False, msa=[1, 0, 1], model_type="face"):
+def get_model(class_range,use_lora=False, msa=[1, 0, 1]):
     class Args:
         def __init__(self):
-            self.use_lora = use_lora
-            self.msa = msa
-            self.ffn_adapt = True
-            self.msa_adapt = True
-            self.vpt_on = False
-            self.vpt_num = 0
-            self.general_pos = [0, 1, 2, 3, 4, 5]
-            self.specfic_pos = [6, 7, 8, 9, 10, 11]
-            self.use_distillation = False
-            self.use_block_weight = True
-            self.ffn_num = 8
-            self.ffn_adapter_init_option = "lora"
-            self.ffn_adapter_scalar = "1.0"
-            self.ffn_adapter_layernorm_option = "in"
-            self.d_model = 768
+            self.task_type = "cl"                     # GS-LoRA mode
+            self.use_lora = True                      # Enable LoRA (even if from scratch)
+            self.ffn_adapt = True                     # Enable FFN adaptation (GS-LoRA)
+            
+            self.vpt_on = False                       # Not using VPT
+            self.vpt_num = 0                          # No VPT prompts
+
+            self.msa = [1, 0, 1]                      # Apply LoRA to first and last MSA layers
+            self.general_pos = [0, 1, 2, 3, 4, 5]     # Shared adapter positions
+            self.specfic_pos = [6, 7, 8, 9, 10, 11]   # Task-specific adapter positions
+
+            self.use_distillation = True              # Enable distillation (used in original paper)
+            self.use_block_weight = True              # Enable block weighting mechanism
+
+            self.ffn_num = 8                          # Adapter bottleneck size (rank)
+            self.ffn_adapter_init_option = "lora"     # Use zero-init (residual style)
+            self.ffn_adapter_scalar = "1.0"           # Scaling factor (fixed or learnable)
+            self.ffn_adapter_layernorm_option = "in"  # LayerNorm inside adapter
+
+            self.d_model = 768                        # ViT-Base hidden dimension
+            self.msa_adapt = True                     # Enable MSA adaptation (for CL-LoRA)
+            
             self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     args = Args()
 
-    model_cls = VisionFace if model_type == "face" else VisionDectector
+    img_size = 224
 
-    model = model_cls(
-        img_size=112 if model_type == "face" else 224,
+    model = VisionClassifier(
         patch_size=16,
         embed_dim=768,
-        num_classes=100,  # ✅ Add this line
         depth=12,
         num_heads=12,
-        mlp_ratio=4.0,
+        mlp_ratio=4,
         qkv_bias=True,
-        distilled=False,
-        drop_rate=0.0,
-        attn_drop_rate=0.0,
-        drop_path_rate=0.1,
-        tuning_config=args,
-        embed_layer=PatchEmbed,
         norm_layer=partial(torch.nn.LayerNorm, eps=1e-6),
+        tuning_config=args,
     ).to(args._device)
 
-    model=freeze_train(model)
+    # if not use_lora:
+        # model = freeze_output(model,class_range)
+    print_parameter_stats(model)
 
     return model, args
 
-
-def freeze_train(model):
+def freeze_output(model, class_range, head_attr="head"):
     """
-    Freezes classification logits for class indices 50–99.
-    Keeps everything else trainable for training only on classes 0–49.
+    Freezes classifier head weights for output nodes outside class_range.
+    Keeps everything else trainable.
+    
+    Args:
+        model: Your model (must have an attribute for classifier head, e.g., model.head or model.det_head).
+        class_range: Tuple (start_class, end_class), inclusive, specifying trainable class indices.
+        head_attr: Name of classifier head attribute ("head" by default, "det_head" for detection head).
+    Returns:
+        Model with correct parameters frozen.
     """
-    # Freeze only the classifier weights for class 50–99
-    if hasattr(model, 'det_head') and isinstance(model.det_head, torch.nn.Linear):
-        with torch.no_grad():
-            # Zero gradients explicitly to avoid updates
-            model.det_head.weight[50:].requires_grad = False
-            model.det_head.bias[50:].requires_grad = False
+    head = getattr(model, head_attr, None)
+    if not (isinstance(head, torch.nn.Linear)):
+        print(f"❌ Could not find valid classifier head '{head_attr}' in model.")
+        return model
 
-    # Optionally: you can also print what's being frozen
-    print("🔒 Freezing classification head weights for classes 50–99")
+    num_outputs = head.weight.shape[0]
+    start_class, end_class = class_range
+    frozen_indices = list(range(0, start_class)) + list(range(end_class + 1, num_outputs))
+    trainable_indices = list(range(start_class, end_class + 1))
+
+    print(f"🔒 Freezing classifier head weights for classes: {frozen_indices}")
+
+    def partial_freeze_hook(grad):
+        grad = grad.clone()  
+        if len(frozen_indices) > 0:
+            grad[frozen_indices] = 0
+        return grad
+
+    head.weight.register_hook(partial_freeze_hook)
+    head.bias.register_hook(partial_freeze_hook)
 
     return model
 
@@ -89,7 +104,7 @@ def apply_lora(model, args):
             p.requires_grad = True
         return model
 
-    print("✅ Applying BiD-LoRA (CL + GS unified)")
+    print("✅ Applying BiD-LoRA")
 
     for adapter in model.cur_adapter:
         for module in adapter:
@@ -98,12 +113,12 @@ def apply_lora(model, args):
             if hasattr(module, "lora_B"):
                 module.lora_B.weight.requires_grad = True
 
-    for block in model.blocks:
-        if hasattr(block, "ffn_lora_fc1") and block.ffn_lora_fc1 is not None:
-            for p in block.ffn_lora_fc1.parameters():
-                p.requires_grad = True
-        if hasattr(block, "ffn_lora_fc2") and block.ffn_lora_fc2 is not None:
-            for p in block.ffn_lora_fc2.parameters():
-                p.requires_grad = True
+    # for block in model.blocks:
+    #     if hasattr(block, "ffn_lora_fc1") and block.ffn_lora_fc1 is not None:
+    #         for p in block.ffn_lora_fc1.parameters():
+    #             p.requires_grad = True
+    #     if hasattr(block, "ffn_lora_fc2") and block.ffn_lora_fc2 is not None:
+    #         for p in block.ffn_lora_fc2.parameters():
+    #             p.requires_grad = True
 
     return model

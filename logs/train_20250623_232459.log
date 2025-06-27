@@ -1,8 +1,0 @@
-[2025-06-23 23:24:59] Using device: cuda
-[2025-06-23 23:24:59] Batch size: 32, Epochs: 20
-[2025-06-24 00:27:44] ✅ Epoch 1 – Avg Train Loss: 52.7777, Accuracy: 4.88%
-[2025-06-24 00:31:06] 📊 Validation Metrics: {'num_classes_detected': 6, 'classes_detected': [0, 5, 17, 38, 39, 40], 'avg_iou': 0.06096722359986948, 'avg_l1_error': 48.078629665972755, 'val_loss': 0.0, 'accuracy': 0.05334581188582124}
-[2025-06-24 00:31:07] 🎉 New best model at epoch 1 (Avg IoU: 0.0610, Accuracy: 5.33%)
-[2025-06-24 00:31:09] Saved checkpoint → checkpoints/epoch_1.pth
-[2025-06-24 00:31:09] Saved metrics   → checkpoints/metrics_epoch_1.json
-[2025-06-24 00:31:09] Epoch 1 complete! Avg Loss: 52.7777, Train Acc: 4.88%, Val Acc: 5.33%, Avg IoU: 0.0610

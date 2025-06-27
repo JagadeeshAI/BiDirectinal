@@ -1,193 +1,112 @@
-import os
-import sys
-import json
-import logging
-from datetime import datetime
-
 import torch
+import torch.nn as nn
+from data import get_dynamic_loader
+from utils.uitls import get_model, print_parameter_stats,apply_lora
 from tqdm import tqdm
-from torchvision.ops import box_iou
 
-from config import Config
-from utils.uitls import get_model, print_parameter_stats
-from models.data import get_detection_loader
+# ---- Config ----
+CR = (0, 49)
+BS = 32
+NW = 4
+EPOCHS = 50
+LR = 5e-5
+EARLY_STOPPING_PATIENCE = 10
+USE_LORA = False  
 
-
-def setup_logger(log_dir: str) -> logging.Logger:
-    os.makedirs(log_dir, exist_ok=True)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_path = os.path.join(log_dir, f"train_{timestamp}.log")
-
-    logger = logging.getLogger("trainer")
-    logger.setLevel(logging.INFO)
-
-    ch = logging.StreamHandler(sys.stdout)
-    ch.setLevel(logging.INFO)
-    fh = logging.FileHandler(log_path)
-    fh.setLevel(logging.INFO)
-
-    fmt = logging.Formatter("[%(asctime)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
-    ch.setFormatter(fmt)
-    fh.setFormatter(fmt)
-
-    logger.addHandler(ch)
-    logger.addHandler(fh)
-    return logger
-
-
-def save_checkpoint(model, optimizer, epoch, path="checkpoints/checkpoint.pth"):
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    torch.save({
-        "model_state_dict":     model.state_dict(),
-        "optimizer_state_dict": optimizer.state_dict(),
-        "epoch":                epoch,
-    }, path)
-
-
-def train_one_epoch(model, loader, optimizer, scheduler, device, epoch, logger):
+def train_one_epoch(model, loader, crit, opt, dev, ep):
     model.train()
-    running_loss = 0.0
-    pbar = tqdm(loader, desc=f"🚀 Epoch {epoch}", leave=False)
+    t_loss, t_corr, t_num = 0, 0, 0
+    loop = tqdm(enumerate(loader), total=len(loader), desc=f"Ep{ep+1} [TRN]", ncols=175)
 
-    for images, targets in pbar:
-        images = [img.to(device) for img in images]
-        targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
+    for _, (x, y) in loop:
+        x, y = x.to(dev), y.to(dev)
+        opt.zero_grad()
+        out = model(x)
+        loss = crit(out, y)
+        loss.backward()
+        opt.step()
 
-        optimizer.zero_grad()
+        bs = y.size(0)
+        t_loss += loss.item() * bs
+        _, p = out.max(1)
+        t_corr += p.eq(y).sum().item()
+        t_num += bs
 
-        # Forward pass
-        loss_dict = model(images, targets)
-        loss_cls = loss_dict["loss_cls"]
-        loss_bbox = loss_dict["loss_bbox"]
-
-        # Weighted total loss
-        total_loss = loss_cls + 0.1 * loss_bbox
-
-        total_loss.backward()
-        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-        optimizer.step()
-        scheduler.step()
-
-        running_loss += total_loss.item()
-
-        postfix = {
-            "loss_cls": f"{loss_cls.item():.4f}",
-            "loss_bbox": f"{loss_bbox.item():.4f}",
-            "total": f"{total_loss.item():.4f}",
-        }
-        pbar.set_postfix(postfix)
-
-    avg_loss = running_loss / len(loader)
-    logger.info(f"✅ Epoch {epoch} – Avg Loss: {avg_loss:.4f}")
-    return avg_loss
+        loop.set_postfix(EL=f"{t_loss / t_num:.2f}", EA=f"{t_corr / t_num:.2f}")
+    return t_loss / t_num, t_corr / t_num
 
 
-
-@torch.no_grad()
-def validate(model, loader, device, logger):
+def eval_one_epoch(model, loader, crit, dev, ep):
     model.eval()
-    detected = set()
-    all_ious = []
-    all_l1   = []
+    v_loss, v_corr, v_num = 0, 0, 0
+    loop = tqdm(enumerate(loader), total=len(loader), desc=f"Ep{ep+1} [VAL]", ncols=175)
 
-    for images, targets in loader:
-        images = [img.to(device) for img in images]
-        gt_boxes = [t["boxes"].to(device) for t in targets]
+    with torch.no_grad():
+        for _, (x, y) in loop:
+            x, y = x.to(dev), y.to(dev)
+            out = model(x)
+            loss = crit(out, y)
 
-        outputs = model(images)
-        for gt, out in zip(gt_boxes, outputs):
-            if out["boxes"].numel() != 4:
-                continue  # prediction must be exactly 1 box [4]
+            bs = y.size(0)
+            v_loss += loss.item() * bs
+            _, p = out.max(1)
+            v_corr += p.eq(y).sum().item()
+            v_num += bs
 
-            pred_box = out["boxes"].view(1, 4)  # [1, 4]
-            gt_box   = gt.view(1, 4)            # [1, 4]
-
-            try:
-                iou = box_iou(pred_box, gt_box)[0, 0].item()
-                l1_error = torch.abs(pred_box - gt_box).mean().item()
-                all_ious.append(iou)
-                all_l1.append(l1_error)
-            except Exception as e:
-                logger.warning(f"⚠️ Skipping box comparison: {e}")
-                continue
-
-            labels = out["labels"].cpu()
-            if labels.dim() == 0:
-                labels = labels.unsqueeze(0)
-            detected.update(labels.tolist())
-
-    avg_iou = sum(all_ious) / len(all_ious) if all_ious else 0.0
-    avg_l1 = sum(all_l1) / len(all_l1) if all_l1 else 0.0
-
-    metrics = {
-        "num_classes_detected": len(detected),
-        "classes_detected":     sorted(detected),
-        "avg_iou":              avg_iou,
-        "avg_l1_error":         avg_l1,
-    }
-    logger.info(f"📊 Validation Metrics: {metrics}")
-    return metrics
+            loop.set_postfix(BL=f"{loss.item():.2f}", BA=f"{(p.eq(y).float().mean().item()):.2f}",
+                             EL=f"{v_loss/v_num:.2f}", EA=f"{v_corr/v_num:.2f}")
+    return v_loss / v_num, v_corr / v_num
 
 
 def main():
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    logger = setup_logger(log_dir="logs")
-    logger.info(f"Using device: {device}")
-    logger.info(f"Batch size: {Config.BATCH_SIZE}, Epochs: {Config.EPOCHS}")
+    dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"🖥️ Device: {dev}")
 
-    train_loader = get_detection_loader(mode="train", batch_size=Config.BATCH_SIZE)
-    val_loader   = get_detection_loader(mode="val",   batch_size=Config.BATCH_SIZE)
+    trn_loader = get_dynamic_loader(class_range=CR, mode="train", batch_size=BS, num_workers=NW)
+    val_loader = get_dynamic_loader(class_range=CR, mode="val", batch_size=BS, num_workers=NW)
 
-    model, _ = get_model(
-        use_lora=False,
-        msa=[1, 0, 1],
-        model_type="face",
-    )
-    model = model.to(device)
+    model, args = get_model(class_range=CR, use_lora=True, msa=[1, 0, 1])
+    model = model.to(dev)
     print_parameter_stats(model)
 
-    optimizer = torch.optim.AdamW(
-        model.parameters(),
-        lr=1e-5,
-        weight_decay=0.05,
-    )
-    steps_per_epoch = len(train_loader)
-    scheduler = torch.optim.lr_scheduler.OneCycleLR(
-        optimizer,
-        max_lr=1e-4,
-        total_steps=Config.EPOCHS * steps_per_epoch,
-        pct_start=0.1,
-        div_factor=100,
-    )
+    crit = nn.CrossEntropyLoss(label_smoothing=0.1)
+    opt = torch.optim.AdamW(filter(lambda p: p.requires_grad, model.parameters()), lr=LR, weight_decay=5e-4)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=EPOCHS)
 
-    best_score = 0.0
+    best_acc = 0.0
+    epochs_no_improve = 0
 
-    for epoch in range(1, Config.EPOCHS + 1):
-        avg_loss = train_one_epoch(
-            model, train_loader, optimizer,
-            scheduler, device,
-            epoch, logger
-        )
+    for ep in range(EPOCHS):
+        trn_loss, trn_acc = train_one_epoch(model, trn_loader, crit, opt, dev, ep)
+        val_loss, val_acc = eval_one_epoch(model, val_loader, crit, dev, ep)
+        scheduler.step()
 
-        val_metrics = validate(model, val_loader, device, logger)
-        score = val_metrics["num_classes_detected"]
+        acc_gap = abs(trn_acc - val_acc)
 
-        if score > best_score:
-            best_score = score
-            save_checkpoint(model, optimizer, epoch, path="checkpoints/best.pth")
-            logger.info(f"🎉 New best model at epoch {epoch} (detected {score} classes)")
+        if val_acc > best_acc:
+            best_acc = val_acc
+            epochs_no_improve = 0
+            torch.save(model.state_dict(), f"classifier_{CR[0]}_{CR[1]}_best.pth")
+            print(f"✅ Ep{ep+1:02d}: New BEST VAL ACC: {val_acc:.3f} (saved)")
+        else:
+            epochs_no_improve += 1
+            print(f"Ep{ep+1:02d}: Val Acc: {val_acc:.3f} (best: {best_acc:.3f})")
 
-        ckpt_path   = f"checkpoints/epoch_{epoch}.pth"
-        metric_path = f"checkpoints/metrics_epoch_{epoch}.json"
-        save_checkpoint(model, optimizer, epoch, path=ckpt_path)
-        with open(metric_path, "w") as f:
-            json.dump(val_metrics, f, indent=2)
-        logger.info(f"Saved checkpoint → {ckpt_path}")
-        logger.info(f"Saved metrics   → {metric_path}")
-        logger.info(f"Epoch {epoch} complete! Avg Loss: {avg_loss:.4f}, Detected Classes: {score}")
+        print(f"📊 Ep{ep+1:02d} | TRN Loss: {trn_loss:.3f}, Acc: {trn_acc:.3f} | "
+              f"VAL Loss: {val_loss:.3f}, Acc: {val_acc:.3f} | BEST: {best_acc:.3f} | GAP: {acc_gap:.3f}\n")
 
-    logger.info("🏆 Training complete!")
-    logger.info(f"Best #classes detected: {best_score}")
+        if epochs_no_improve >= EARLY_STOPPING_PATIENCE:
+            print("⏹️ Early stopping triggered (no improvement).")
+            break
+        if acc_gap < 0.05 and val_acc > 0.85:
+            print("✅ Training converged: accuracy gap < 5% and high val accuracy.")
+            break
+        # if acc_gap > 0.05:
+        #     print(f"❌ Accuracy gap too large ({acc_gap:.3f}) — stopping early.")
+        #     break
+
+
+    print("🎉 Training Complete.")
 
 
 if __name__ == "__main__":

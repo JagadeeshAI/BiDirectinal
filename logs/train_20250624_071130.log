@@ -1,3 +1,0 @@
-[2025-06-24 07:11:30] Using device: cuda
-[2025-06-24 07:11:30] Batch size: 32, Epochs: 20
-[2025-06-24 07:50:33] ✅ Epoch 1 – Avg Train Loss: 52.7394, Accuracy: 4.86%
